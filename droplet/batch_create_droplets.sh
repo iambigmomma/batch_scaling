@@ -17,7 +17,7 @@ fi
 
 # Create Droplets and Output List
 echo "Creating droplets..."
-created_droplets=()
+created_droplet_ids=()
 for (( i=1; i<=number_of_droplets; i++ ))
 do
     droplet_name="${droplet_name_prefix}-${i}"
@@ -26,15 +26,37 @@ do
         -H "Content-Type: application/json" \
         -d "{\"name\":\"$droplet_name\",\"region\":\"$droplet_region\",\"size\":\"$droplet_size\",\"image\":\"$droplet_image\"$tag_json}")
 
-    created_droplet_name=$(echo $create_response | jq -r '.droplet.name')
-    created_droplets+=("$created_droplet_name")
-    echo "Created droplet: $created_droplet_name"
+    created_droplet_id=$(echo $create_response | jq -r '.droplet.id')
+    created_droplet_ids+=("$created_droplet_id")
+    echo "Created droplet: $droplet_name (ID: $created_droplet_id)"
 done
+
+# Fetch and list Firewalls
+echo "Fetching available firewalls..."
+firewalls_response=$(curl -X GET "https://api.digitalocean.com/v2/firewalls" \
+    -H "Authorization: Bearer $api_token")
+
+echo "Available firewalls:"
+echo "$firewalls_response" | jq -r '.firewalls[] | "\(.name) - ID: \(.id)"'
+
+# Optional Firewall Attachment
+read -p "Do you want to attach a firewall to the created droplets? (yes/no): " attach_firewall
+if [ "$attach_firewall" == "yes" ]; then
+    read -p "Enter the Firewall ID: " firewall_id
+
+    # Convert droplet IDs to JSON array
+    droplet_ids_json=$(echo "${created_droplet_ids[@]}" | jq -R 'split(" ") | map(tonumber)')
+
+    # Attach Firewall to Droplets
+    firewall_response=$(curl -X POST "https://api.digitalocean.com/v2/firewalls/$firewall_id/droplets" \
+        -H "Authorization: Bearer $api_token" \
+        -H "Content-Type: application/json" \
+        -d "{\"droplet_ids\":$droplet_ids_json}")
+
+    echo "Firewall attachment response: $firewall_response"
+else
+    echo "Skipping firewall attachment."
+fi
 
 # Final Output
-echo "List of created droplets:"
-for droplet in "${created_droplets[@]}"; do
-    echo "$droplet"
-done
-
 echo "Creation process complete."
