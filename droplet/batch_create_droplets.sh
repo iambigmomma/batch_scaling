@@ -4,9 +4,24 @@
 api_token="${DO_API_TOKEN}"
 default_droplet_image="ubuntu-20-04-x64"
 default_droplet_name_prefix="my-droplet"
-default_droplet_region="nyc1"
-default_droplet_size="s-1vcpu-1gb"
-default_number_of_droplets=5
+default_droplet_region="nyc3"
+default_droplet_size="s-4vcpu-8gb-amd"
+default_number_of_droplets=3
+
+# Fetch and list SSH Keys
+echo "Fetching available SSH keys..."
+ssh_keys_response=$(curl -X GET "https://api.digitalocean.com/v2/account/keys" \
+    -H "Authorization: Bearer $api_token")
+
+echo "Available SSH keys:"
+echo "$ssh_keys_response" | jq -r '.ssh_keys[] | "\(.name) - ID: \(.id)"'
+
+# Prompt for SSH Key IDs
+read -p "Enter the SSH Key IDs to attach to the new droplets (comma-separated): " input_ssh_key_ids
+# Format the input as an array
+attach_ssh_keys="[$(echo $input_ssh_key_ids | sed 's/, */,/g')]"
+
+# Continue with your script...
 
 # Fetch and list Projects
 echo "Fetching available projects..."
@@ -59,6 +74,7 @@ if [ ! -z "$droplet_tag" ]; then
     tag_json=",\"tags\":[\"$droplet_tag\"]"
 fi
 
+
 # Create Droplets and Output List
 echo "Creating droplets..."
 created_droplet_ids=()
@@ -68,7 +84,7 @@ do
     create_response=$(curl -X POST "https://api.digitalocean.com/v2/droplets" \
         -H "Authorization: Bearer $api_token" \
         -H "Content-Type: application/json" \
-        -d "{\"name\":\"$droplet_name\",\"region\":\"$droplet_region\",\"size\":\"$droplet_size\",\"image\":\"$droplet_image\"$tag_json}")
+        -d "{\"name\":\"$droplet_name\",\"region\":\"$droplet_region\",\"size\":\"$droplet_size\",\"image\":\"$droplet_image\"$tag_json,\"ssh_keys\":${attach_ssh_keys}}")
 
     # Check if the droplet was created successfully
     if [ "$(echo "$create_response" | jq -r '.droplet')" != "null" ]; then
@@ -80,6 +96,7 @@ do
         echo "Error: $(echo "$create_response" | jq -r '.message')"
         exit 1
     fi
+    sleep 1
 done
 # Fetch and list Firewalls
 echo "Fetching available firewalls..."
